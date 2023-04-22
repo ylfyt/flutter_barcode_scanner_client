@@ -16,26 +16,29 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   String _scanBarcode = 'Unknown';
 
-  Socket? _socket;
+  RawDatagramSocket? _socket;
   String _serverResponse = "";
 
   @override
   void initState() {
     super.initState();
 
-    print("Start to connect");
-    Socket.connect('127.0.0.1', 8080).then((socket) {
-      print("COnnected");
-      socket.encoding = utf8; // <== force the encoding
+    RawDatagramSocket.bind(InternetAddress.anyIPv4, 1054)
+        .then((RawDatagramSocket socket) {
+      print('Datagram socket ready to receive');
+      print('${socket.address.address}:${socket.port}');
+
+      socket.send('Datagram socket ready to receive'.codeUnits,
+          InternetAddress("127.0.0.1"), 1053);
       _socket = socket;
-      socket.listen((List<int> data) {
-        String result = utf8.decode(data);
-        print("Server: $result");
-        setState(() {
-          _serverResponse = "Server: $result";
-        });
+      socket.listen((RawSocketEvent e) {
+        Datagram? d = socket.receive();
+        if (d == null) return;
+
+        String message = String.fromCharCodes(d.data).trim();
+        print('Datagram from $d.address.address:${d.port}: $message');
       });
-    }).catchError(print);
+    });
   }
 
   Future<void> startBarcodeScanStream() async {
@@ -66,7 +69,8 @@ class _MyAppState extends State<MyApp> {
     setState(() {
       print(_socket);
       _scanBarcode = barcodeScanRes;
-      _socket?.write(barcodeScanRes);
+      _socket?.send(
+          barcodeScanRes.codeUnits, InternetAddress("127.0.0.1"), 1053);
     });
   }
 
@@ -121,7 +125,8 @@ class _MyAppState extends State<MyApp> {
                         ),
                         ElevatedButton(
                             onPressed: () {
-                              _socket?.write(_scanBarcode);
+                              _socket?.send(_scanBarcode.codeUnits,
+                                  InternetAddress("127.0.0.1"), 1053);
                             },
                             child: Text('Send to server')),
                         Text(_serverResponse, style: TextStyle(fontSize: 20)),
